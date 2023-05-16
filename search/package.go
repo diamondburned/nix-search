@@ -195,12 +195,12 @@ func (pi packageIndexer) start(ctx context.Context) error {
 			jobs = jobs[1:]
 			ongoing++
 
-			logger.Info("queued job", "attrs", job.attrs)
+			logger.Debug("queued job", "attrs", job.attrs)
 
 		case result := <-outCh:
 			ongoing--
 
-			level := hclog.Info
+			level := hclog.Debug
 			msg := "finished job"
 			if result.error != nil {
 				if len(result.attrs) == 0 {
