@@ -200,14 +200,20 @@ func (pi packageIndexer) start(ctx context.Context) error {
 		case result := <-outCh:
 			ongoing--
 
-			logger.Info("finished job",
+			level := hclog.Info
+			msg := "finished job"
+			if result.error != nil {
+				if len(result.attrs) == 0 {
+					return result.error
+				}
+				level = hclog.Warn
+				msg = "failed job"
+			}
+
+			logger.Log(level, msg,
 				"attrs", result.attrs,
 				"error", result.error,
 				"jobs", len(result.jobs))
-
-			if len(result.attrs) == 0 && result.error != nil {
-				return result.error
-			}
 
 			jobs = append(jobs, result.jobs...)
 		}
