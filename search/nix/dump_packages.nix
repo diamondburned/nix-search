@@ -19,23 +19,35 @@ let pkgs' = attrByPath attrs {} pkgs;
 		let eval = tryEval (builtins.isAttrs x);
 		in  eval.success && eval.value;
 
-	extractAttrs = x: attrs:
-		filterAttrs (n: v: elem n attrs) x;
+	hasAttr = x: attr:
+		let eval = tryEval (builtins.hasAttr attr x);
+		in  eval.success && eval.value;
 
-	tryString = x: attrs:
-		if hasAttr x attr
-		then toString (getAttr x attr)
-		else "";
+	extractStringAttrs = x:
+		filterAttrs (n: v: isString v) x;
+
+	hasStringAttr = x: attr:
+		hasAttr x attr &&
+		isValid x.${attr} &&
+		isString x.${attr};
 
 	isPackage = x:
-		x ? type &&
-		x ? outPath &&
+		hasAttr x "type" &&
+		hasAttr x "outPath" &&
 		x.type == "derivation";
+
+	isString = x:
+		let eval = tryEval (builtins.isString x);
+		in  eval.success && eval.value;
 
 	shouldRecurseInto = x:
 		isAttrs x &&
-		x ? recurseForDerivations &&
+		hasAttr x "recurseForDerivations"	&&
 		x.recurseForDerivations == true;
+
+	relevantMeta = [ "description" "homepage" "license" "url" "version" ];
+	filterMeta = x:
+		filterAttrs (n: v: elem n relevantMeta) x;
 
 	# bfs is too slow for Nix.
 	# bfs = pkgs: mapAttrs
@@ -48,24 +60,25 @@ in
 
 mapAttrs
 	(k: v:
-		if isPackage v
-		then
-			if isValid v.meta
-			then v.meta // (
-					if v ? version
-					then { version = v.version; }
-					else
-						if (v ? meta && v.meta ? version)
-						then { version = v.meta.version; }
-						else { }
-				)
-			else {  }
+		if shouldRecurseInto v
+		then { hasMore = true; }
 		else
-			{ hasMore = true; })
+			if hasAttr v "meta" && isValid v.meta
+			then filterMeta (extractStringAttrs v.meta) // (
+				if hasStringAttr v "version"
+				then { version = v.version; }
+				else { }
+			)
+			else
+				if hasStringAttr v "version"
+				then { version = v.version; }
+				else { }
+	)
 	(filterAttrs
 		(k: v:
 			!(hasPrefix k "_") &&
 			(isValid v) &&
 			(isAttrs v) &&
-			(shouldRecurseInto v || (isPackage v && isValid v.meta)))
-		(pkgs'))
+			(shouldRecurseInto v || isPackage v))
+		(pkgs')
+	)
