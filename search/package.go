@@ -3,7 +3,6 @@ package search
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -131,8 +130,8 @@ type packageIndexJob struct {
 
 type packageIndexResult struct {
 	packageIndexJob
-	jobs []packageIndexJob
-	errs []error
+	error error
+	jobs  []packageIndexJob // more jobs
 }
 
 type packageIndexer struct {
@@ -165,7 +164,6 @@ func (pi packageIndexer) start(ctx context.Context) error {
 
 	jobCh := make(chan packageIndexJob)
 	outCh := make(chan packageIndexResult)
-	var errs []error
 
 	for i := 0; i < pi.opts.Parallelism; i++ {
 		wg.Add(1)
@@ -204,15 +202,18 @@ func (pi packageIndexer) start(ctx context.Context) error {
 
 			logger.Info("finished job",
 				"attrs", result.attrs,
-				"jobs", len(result.jobs),
-				"errs", len(result.errs))
+				"error", result.error,
+				"jobs", len(result.jobs))
 
-			errs = append(errs, result.errs...)
+			if len(result.attrs) == 0 && result.error != nil {
+				return result.error
+			}
+
 			jobs = append(jobs, result.jobs...)
 		}
 	}
 
-	return errors.Join(errs...)
+	return nil
 }
 
 func (pi packageIndexer) worker(ctx context.Context, jobCh <-chan packageIndexJob, outCh chan<- packageIndexResult) {
@@ -240,7 +241,7 @@ func (pi packageIndexer) worker(ctx context.Context, jobCh <-chan packageIndexJo
 			if err != nil {
 				emit(packageIndexResult{
 					packageIndexJob: job,
-					errs:            []error{err},
+					error:           err,
 				})
 				continue
 			}

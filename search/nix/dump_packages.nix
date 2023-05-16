@@ -28,9 +28,9 @@ let pkgs' = attrByPath attrs {} pkgs;
 		else "";
 
 	isPackage = x:
-		# We use tryEval to ensure that the derivation must have a type field with the string
-		# "derivation".
-		x ? type && x ? outPath && x.type == "derivation";
+		x ? type &&
+		x ? outPath &&
+		x.type == "derivation";
 
 	shouldRecurseInto = x:
 		isAttrs x &&
@@ -50,14 +50,16 @@ mapAttrs
 	(k: v:
 		if isPackage v
 		then
-			v.meta // (
-				if v ? version
-				then { version = v.version; }
-				else
-					if (v ? meta && v.meta ? version)
-					then { version = v.meta.version; }
-					else { }
-			)
+			if isValid v.meta
+			then v.meta // (
+					if v ? version
+					then { version = v.version; }
+					else
+						if (v ? meta && v.meta ? version)
+						then { version = v.meta.version; }
+						else { }
+				)
+			else {  }
 		else
 			{ hasMore = true; })
 	(filterAttrs
@@ -65,5 +67,5 @@ mapAttrs
 			!(hasPrefix k "_") &&
 			(isValid v) &&
 			(isAttrs v) &&
-			(isPackage v || shouldRecurseInto v))
+			(shouldRecurseInto v || (isPackage v && isValid v.meta)))
 		(pkgs'))

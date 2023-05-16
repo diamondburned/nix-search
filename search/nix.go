@@ -117,7 +117,9 @@ func execCommandWriter(ctx context.Context, arg0 string, argv ...string) (io.Rea
 			"command finished",
 			"command", arg0,
 			"args", argv,
-			"duration", endedAt.Sub(startedAt))
+			"duration", endedAt.Sub(startedAt),
+			"stderr", stderr.String(),
+		)
 	}
 
 	if err := cmd.Start(); err != nil {
