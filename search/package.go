@@ -31,7 +31,7 @@ type TopLevelPackages struct {
 	PackageSet
 	// Channel is the name of the channel that these packages are from.
 	// For example, "nixpkgs".
-	Channel string `json:"name"`
+	Channel string `json:"channel"`
 }
 
 // Walk walks the package set, calling f on each derivation. If f returns
