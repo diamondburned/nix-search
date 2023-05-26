@@ -13,9 +13,6 @@ type PackagesSearcher interface {
 	// regex.
 	// The channel is closed when there are no more results or ctx is canceled.
 	SearchPackagesRe(ctx context.Context, regex string) (<-chan SearchedPackage, error)
-	// ReplacePackageIndex replaces the index of packages with the given name
-	// with the given set.
-	ReplacePackageIndex(TopLevelPackages) error
 }
 
 // SearchedPackage is a package that was searched for.
