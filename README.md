@@ -34,6 +34,48 @@ queries, such as `nix-search -e 'description contains "foo" and name contains
 Flakes are not supported. I don't use them. Also, the Nix developers should
 actually develop a better `nix search`, since nothing in Nix is stable anyway :)
 
+## Installation
+
+### Nix
+
+TODO: make `default.nix`
+
+### Go
+
+```go
+go install libdb.so/nix-search/cmd/nix-search@latest
+```
+
 ## Usage
 
-TODO
+First, index the Nixpkgs tree:
+
+```sh
+nix-search --index
+```
+
+Then, search for packages:
+
+```sh
+nix-search firefox
+```
+
+## Performance
+
+`nix-search` is reasonably fast. It takes about 20 seconds to index the entire
+Nixpkgs tree, and searching is almost instantaneous.
+
+```
+―❤―▶ time nix-search --index
+
+real	0m21.760s
+user	2m36.436s
+sys	0m30.729s
+
+―❤―▶ time nix-search firefox > /dev/null
+
+real	0m0.033s
+user	0m0.028s
+sys	0m0.006s
+
+```
