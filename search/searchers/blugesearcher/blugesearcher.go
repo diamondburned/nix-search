@@ -1,4 +1,4 @@
-package bluge
+package blugesearcher
 
 import (
 	"encoding/json"
