@@ -20,9 +20,11 @@ var Flags = []cli.Flag{
 				return cli.Exit("verbosity level must be between 0 and 3", 1)
 			}
 
+			log := hclog.FromContext(c.Context)
 			if Verbosity > 0 {
-				log := hclog.FromContext(c.Context)
 				log.SetLevel(hclog.Warn - hclog.Level(Verbosity))
+			} else {
+				log.SetLevel(hclog.Warn)
 			}
 
 			return nil
