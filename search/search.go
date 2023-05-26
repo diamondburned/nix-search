@@ -30,7 +30,7 @@ type Opts struct {
 type SearchedPackage struct {
 	Package
 	// Path is the path to the derivation.
-	Path Path
+	Path string
 }
 
 // HighlightStyle is a style of highlighting.

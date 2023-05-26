@@ -187,6 +187,11 @@ func IndexPackages(ctx context.Context, opts IndexPackagesOpts) (TopLevelPackage
 // Path is a path to a package. It always starts with the channel name.
 type Path []string
 
+// FromDotPath converts a dot-separated path to a Path.
+func FromDotPath(path string) Path {
+	return strings.Split(path, ".")
+}
+
 // String implements fmt.Stringer.
 func (p Path) String() string {
 	return strings.Join(p, ".")
