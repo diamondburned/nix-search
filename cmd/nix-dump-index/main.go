@@ -51,10 +51,7 @@ func main() {
 func mainAction(c *cli.Context) error {
 	ctx := c.Context
 
-	pkgs, err := search.IndexPackages(ctx, search.IndexPackagesOpts{
-		Channel:     opts.Channel,
-		Parallelism: opts.Parallelism,
-	})
+	pkgs, err := search.IndexPackages(ctx, opts)
 	if err != nil {
 		return errors.Wrap(err, "failed to index packages")
 	}
