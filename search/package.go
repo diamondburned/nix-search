@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -11,21 +12,70 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
-// Package is either a derivation or a package set.
-type Package interface {
-	isPackage()
+// Derivation is either a package or a package set.
+type Derivation interface {
+	isDerivation()
 }
 
-// Derivation is a package that is a derivation.
-type Derivation struct {
+// Package is a package that is a derivation.
+type Package struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description"`
 	Version     string `json:"version,omitempty"`
+	Homepage    string `json:"homepage,omitempty"`
 	Broken      bool   `json:"broken,omitempty"`
 }
 
+// TopLevelPackages is a set of packages that are top-level packages.
+type TopLevelPackages struct {
+	PackageSet
+	// Channel is the name of the channel that these packages are from.
+	// For example, "nixpkgs".
+	Channel string `json:"name"`
+}
+
+// Walk walks the package set, calling f on each derivation. If f returns
+// false, the walk is stopped. A DFS is used.
+func (s TopLevelPackages) Walk(f func(Path, Package) bool) {
+	s.PackageSet.Walk(Path{s.Channel}, f)
+}
+
 // PackageSet is a package that is a package set.
-type PackageSet map[string]Package
+type PackageSet map[string]Derivation
+
+// Walk walks the package set, calling f on each derivation. If f returns
+// false, the walk is stopped. A DFS is used.
+func (s PackageSet) Walk(selfPath Path, f func(Path, Package) bool) {
+	type node struct {
+		path Path
+		pkgs PackageSet
+	}
+
+	stack := make([]node, 1, len(s))
+	stack[0] = node{selfPath, s}
+
+	for len(stack) > 0 {
+		// Pop the top of the stack.
+		top := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		for name, v := range top.pkgs {
+			switch v := v.(type) {
+			case Package:
+				if !f(top.path.PushInplace(name), v) {
+					return
+				}
+			case PackageSet:
+				stack = append(stack, node{
+					path: top.path.Push(name),
+					pkgs: v,
+				})
+			default:
+				panic("unknown package type")
+			}
+		}
+	}
+}
 
 // MarshalJSON implements json.Marshaler.
 func (s PackageSet) MarshalJSON() ([]byte, error) {
@@ -35,14 +85,14 @@ func (s PackageSet) MarshalJSON() ([]byte, error) {
 	m := make(map[string]any, len(s))
 	for k, v := range s {
 		switch v := v.(type) {
-		case Derivation:
+		case Package:
 			v.Name = ""
 			m[k] = struct {
 				Type string `json:"_type"`
-				Derivation
+				Package
 			}{
-				Type:       "derivation",
-				Derivation: v,
+				Type:    "derivation",
+				Package: v,
 			}
 		case PackageSet:
 			m[k] = struct {
@@ -77,7 +127,7 @@ func (s PackageSet) UnmarshalJSON(b []byte) error {
 
 		switch t.Type {
 		case "derivation":
-			var drv Derivation
+			var drv Package
 			if err := json.Unmarshal(v, &drv); err != nil {
 				return err
 			}
@@ -99,8 +149,8 @@ func (s PackageSet) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (Derivation) isPackage() {}
-func (PackageSet) isPackage() {}
+func (Package) isDerivation()    {}
+func (PackageSet) isDerivation() {}
 
 // IndexPackagesOpts are options for IndexPackages.
 type IndexPackagesOpts struct {
@@ -115,12 +165,54 @@ var DefaultIndexPackageOpts = IndexPackagesOpts{
 }
 
 // IndexPackages indexes all packages in the given channel.
-func IndexPackages(ctx context.Context, opts IndexPackagesOpts) (PackageSet, error) {
+func IndexPackages(ctx context.Context, opts IndexPackagesOpts) (TopLevelPackages, error) {
 	ctx = hclog.WithContext(ctx,
 		hclog.FromContext(ctx).Named("search.IndexPackages"))
 
 	pi := newPackageIndexer(opts)
-	return pi.packages, pi.start(ctx)
+
+	name := opts.Channel
+	if strings.HasPrefix(name, "<") && strings.HasSuffix(name, ">") {
+		name = name[1 : len(name)-1]
+	} else {
+		name = path.Base(name)
+	}
+
+	return TopLevelPackages{
+		PackageSet: pi.packages,
+		Channel:    name,
+	}, pi.start(ctx)
+}
+
+// Path is a path to a package. It always starts with the channel name.
+type Path []string
+
+// String implements fmt.Stringer.
+func (p Path) String() string {
+	return strings.Join(p, ".")
+}
+
+// Push appends names to the path. The returned path will be a reallocated
+// slice.
+func (p Path) Push(names ...string) Path {
+	return append(append([]string(nil), p...), names...)
+}
+
+// PushInplace is like Append, but it appends to the path in-place.
+// Go may or may not reallocate the slice.
+func (p Path) PushInplace(names ...string) Path {
+	return append(p, names...)
+}
+
+// Pop pops the last name off the path. The returned path will not be a
+// reallocated slice.
+func (p Path) Pop() Path {
+	return p[:len(p)-1]
+}
+
+// Clone clones the path.
+func (p Path) Clone() Path {
+	return append([]string(nil), p...)
 }
 
 type packageIndexJob struct {
@@ -266,7 +358,7 @@ func (pi packageIndexer) worker(ctx context.Context, jobCh <-chan packageIndexJo
 					continue
 				}
 
-				job.parent[attr] = Derivation{
+				job.parent[attr] = Package{
 					Name:        attr,
 					Description: pkg.Description,
 					Version:     pkg.Version,
