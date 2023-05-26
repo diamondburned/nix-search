@@ -6,13 +6,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/blugelabs/bluge"
-	"github.com/blugelabs/bluge/index"
 	"libdb.so/nix-search/search"
+
+	blugeindex "github.com/blugelabs/bluge/index"
 )
 
-func batchPackageSet(packages search.TopLevelPackages) (*index.Batch, error) {
+func batchPackageSet(packages search.TopLevelPackages) (*blugeindex.Batch, error) {
 	batch := bluge.NewBatch()
 	packages.Walk(func(path search.Path, drv search.Package) bool {
 		doc := newPackageDocument(path, drv)
@@ -28,12 +30,12 @@ func newPackageDocument(path search.Path, pkg search.Package) *bluge.Document {
 		log.Panicln("cannot marshal derivation:", err)
 	}
 
-	log.Printf("indexing %s: %#v", path.String(), pkg)
-
 	doc := bluge.NewDocument(path.String())
 	doc.AddField(bluge.NewStoredOnlyField("json", drvJSON))
-	doc.AddField(bluge.NewTextField("name", pkg.Name))
-	doc.AddField(bluge.NewTextField("description", pkg.Description))
+	// hack because bluge is kinda balls and doesn't treat . as a word boundary
+	doc.AddField(newField("path", strings.Join(path, " ")))
+	doc.AddField(newField("name", pkg.Name))
+	doc.AddField(newField("description", pkg.Description))
 
 	return doc
 }
@@ -46,4 +48,12 @@ func defaultPath() (string, error) {
 
 	cacheDir = filepath.Join(cacheDir, "nix-search")
 	return cacheDir, nil
+}
+
+func newField(name string, value string) *bluge.TermField {
+	return bluge.NewTextField(name, value).
+		StoreValue().
+		Aggregatable().
+		HighlightMatches().
+		SearchTermPositions()
 }

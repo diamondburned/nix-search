@@ -88,7 +88,8 @@ func TestBluge(t *testing.T) {
 
 		expectSearches := []expectSearch{
 			{"nix-search", []string{"nix-search"}},
-			{"frefx", []string{"firefox"}},
+			{"fire", []string{"firefox"}},
+			{"go", []string{"staticcheck", "bluge"}},
 		}
 
 		for _, expect := range expectSearches {
@@ -98,7 +99,9 @@ func TestBluge(t *testing.T) {
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
 
-				results, err := searcher.SearchPackages(ctx, expect.query)
+				results, err := searcher.SearchPackages(ctx, expect.query, search.Opts{
+					// Highlight: search.HighlightStyleHTML{},
+				})
 				assert.NoError(t, err, "cannot search for", expect.query)
 
 				for result := range results {
@@ -130,7 +133,7 @@ func TestBluge(t *testing.T) {
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
 
-				results, err := searcher.SearchPackages(ctx, unexpected.query)
+				results, err := searcher.SearchPackages(ctx, unexpected.query, search.Opts{})
 				assert.NoError(t, err, "cannot search for", unexpected.query)
 
 				for result := range results {

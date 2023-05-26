@@ -29,6 +29,10 @@ func IndexPackages(ctx context.Context, path string, packages search.TopLevelPac
 		}
 	}
 
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return fmt.Errorf("cannot create index directory: %w", err)
+	}
+
 	// Plan:
 	// 1. Create a temporary directory which will be used as the new index.
 	// 2. Index the packages into the new index.
