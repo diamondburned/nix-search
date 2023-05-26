@@ -68,7 +68,7 @@ func TestBluge(t *testing.T) {
 		assert.NoError(t, err, "cannot index packages")
 	})
 
-	searcher, err := OpenPackagesSearcher(tempIndex)
+	searcher, err := Open(tempIndex)
 	assert.NoError(t, err, "cannot open searcher")
 
 	t.Cleanup(func() {

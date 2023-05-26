@@ -20,9 +20,9 @@ type PackagesSearcher struct {
 
 var _ search.PackagesSearcher = (*PackagesSearcher)(nil)
 
-// OpenPackagesSearcher opens a PackagesSearcher at the given path. If path is
+// Open opens a PackagesSearcher at the given path. If path is
 // empty, the default path is used.
-func OpenPackagesSearcher(path string) (*PackagesSearcher, error) {
+func Open(path string) (*PackagesSearcher, error) {
 	if path == "" {
 		var err error
 
