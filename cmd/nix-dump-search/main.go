@@ -7,9 +7,9 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/diamondburned/nix-search/search"
 	"github.com/hashicorp/go-hclog"
 	"github.com/spf13/pflag"
+	"libdb.so/nix-search/search"
 )
 
 var (
