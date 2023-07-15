@@ -77,6 +77,16 @@ func (s PackageSet) Walk(selfPath Path, f func(Path, Package) bool) {
 	}
 }
 
+// Count returns the number of packages in this set.
+func (s PackageSet) Count() int {
+	var count int
+	s.Walk(Path{}, func(Path, Package) bool {
+		count++
+		return true
+	})
+	return count
+}
+
 // MarshalJSON implements json.Marshaler.
 func (s PackageSet) MarshalJSON() ([]byte, error) {
 	// Marshal this set in a special way: we want to marshal it as an object
