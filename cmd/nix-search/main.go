@@ -17,6 +17,7 @@ import (
 	"libdb.so/nix-search/cmd/internal/commoncmd"
 	"libdb.so/nix-search/search"
 	"libdb.so/nix-search/search/searchers/blugesearcher"
+	"libdb.so/nix-search/search/searchers/closestmatch"
 )
 
 var opts = search.DefaultIndexPackageOpts
@@ -91,6 +92,10 @@ func mainAction(c *cli.Context) error {
 			return errors.Wrap(err, "failed to get package index")
 		}
 
+		if err := closestmatch.IndexPackages(ctx, indexPath, pkgs); err != nil {
+			return errors.Wrap(err, "failed to store closestmatch index")
+		}
+
 		if err := blugesearcher.IndexPackages(ctx, indexPath, pkgs); err != nil {
 			return errors.Wrap(err, "failed to store indexed packages")
 		}
@@ -101,11 +106,10 @@ func mainAction(c *cli.Context) error {
 		return nil
 	}
 
-	searcher, err := blugesearcher.Open(indexPath)
+	searcher, err := closestmatch.New(indexPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to create searcher (try running with --update)")
 	}
-	defer searcher.Close()
 
 	out := io.WriteCloser(os.Stdout)
 
