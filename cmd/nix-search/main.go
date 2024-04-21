@@ -20,6 +20,11 @@ import (
 
 var opts = search.DefaultIndexPackageOpts
 
+var searchOpts = search.Opts{
+	Highlight: search.HighlightStyleANSI{},
+	Exact:     true,
+}
+
 var app = cli.App{
 	Name:      "nix-search",
 	UsageText: `nix-search [options] [query]`,
@@ -36,6 +41,12 @@ var app = cli.App{
 				Aliases: []string{"i"},
 				Usage:   "update the index before searching",
 				Value:   false,
+			},
+			&cli.BoolFlag{
+				Name:        "exact",
+				Aliases:     []string{"e"},
+				Value:       searchOpts.Exact,
+				Destination: &searchOpts.Exact,
 			},
 			&cli.StringFlag{
 				Name:    "index-path",
@@ -151,9 +162,7 @@ func mainAction(c *cli.Context) error {
 
 	defer out.Close()
 
-	pkgsCh, err := searcher.SearchPackages(ctx, query, search.Opts{
-		Highlight: search.HighlightStyleANSI{},
-	})
+	pkgsCh, err := searcher.SearchPackages(ctx, query, searchOpts)
 	if err != nil {
 		return errors.Wrap(err, "failed to search packages")
 	}

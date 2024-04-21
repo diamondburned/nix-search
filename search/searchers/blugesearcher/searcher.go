@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/blugelabs/bluge"
 	"github.com/hashicorp/go-hclog"
@@ -74,17 +75,18 @@ func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opt
 	} else {
 		searchQuery.AddShould(
 			// For exact matches.
+			bluge.NewTermQuery(query).SetField("path").SetBoost(16),
 			bluge.NewTermQuery(query).SetField("name").SetBoost(8),
 			// For full word matches.
-			bluge.NewMatchQuery(query).SetField("path").SetBoost(4),
+			bluge.NewMatchQuery(query).SetField("path").SetBoost(6),
 			bluge.NewMatchQuery(query).SetField("name").SetBoost(4),
 			bluge.NewMatchQuery(query).SetField("description").SetBoost(2),
 			// For partial substring matches.
-			bluge.NewWildcardQuery("*"+query+"*").SetField("path").SetBoost(2),
+			bluge.NewWildcardQuery("*"+query+"*").SetField("path").SetBoost(4),
 			bluge.NewWildcardQuery("*"+query+"*").SetField("name").SetBoost(2),
 			bluge.NewWildcardQuery("*"+query+"*").SetField("description"),
 			// For fuzzy matches.
-			bluge.NewFuzzyQuery(query).SetField("path").SetBoost(2),
+			bluge.NewFuzzyQuery(query).SetField("path").SetBoost(4),
 			bluge.NewFuzzyQuery(query).SetField("name").SetBoost(2),
 			bluge.NewFuzzyQuery(query).SetField("description"),
 		)
@@ -108,11 +110,20 @@ func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opt
 
 		var locationBuf []blugesearch.Location
 
-		match, err := matchIter.Next()
-		for err == nil && match != nil {
+		for {
+			match, err := matchIter.Next()
+			if err != nil {
+				log.Error("cannot iterate matches", "error", err)
+				break
+			}
+
+			if match == nil {
+				break
+			}
+
 			var path string
 			var jsonData []byte
-			err := match.VisitStoredFields(func(field string, value []byte) bool {
+			err = match.VisitStoredFields(func(field string, value []byte) bool {
 				switch field {
 				case "_id": // ID has same length as .path but is more correct
 					path = string(value)
@@ -125,7 +136,6 @@ func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opt
 				log.Error("cannot visit stored fields", "error", err)
 				continue
 			}
-			_ = locationBuf
 
 			var pkg search.Package
 			if err := json.Unmarshal(jsonData, &pkg); err != nil {
@@ -140,19 +150,60 @@ func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opt
 
 			if highlighter != nil {
 				locationBuf = match.Complete(locationBuf)
+			}
+
+			if opts.Exact {
+				for i, possible := range []string{
+					result.Path,
+					result.Name,
+					result.Description,
+				} {
+					start := strings.Index(possible, query)
+					if start == -1 {
+						continue
+					}
+
+					// Edit the highlighted location directly, if needed.
+					if highlighter != nil {
+						end := start + len(query)
+
+						termMap := blugesearch.TermLocationMap{
+							query: {
+								&blugesearch.Location{
+									Pos:   0,
+									Start: start,
+									End:   end,
+								},
+							},
+						}
+
+						switch i {
+						case 0:
+							match.Locations["path"] = termMap
+						case 1:
+							match.Locations["name"] = termMap
+						case 2:
+							match.Locations["description"] = termMap
+						}
+					}
+
+					goto ok
+				}
+
+				continue
+			ok:
+			}
+
+			if highlighter != nil {
 				result = highlightPackage(match, highlighter, result)
 			}
 
 			select {
 			case results <- result:
-				match, err = matchIter.Next()
+				// ok
 			case <-ctx.Done():
 				return
 			}
-		}
-
-		if err != nil {
-			log.Error("cannot iterate matches", "error", err)
 		}
 	}()
 

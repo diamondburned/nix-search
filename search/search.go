@@ -24,6 +24,10 @@ type Opts struct {
 	// Regex is whether to use regex matching instead.
 	// If unsupported, it should return an error.
 	Regex bool
+	// Exact is whether to match the package exactly according to the string.
+	// Note that this filter is applied on top of Bluge's, meaning it narrows
+	// down Bluge's results but does not expand them.
+	Exact bool
 }
 
 // SearchedPackage is a package that was searched for.
