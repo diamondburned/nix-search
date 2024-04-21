@@ -83,6 +83,10 @@ func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opt
 			bluge.NewWildcardQuery("*"+query+"*").SetField("path").SetBoost(2),
 			bluge.NewWildcardQuery("*"+query+"*").SetField("name").SetBoost(2),
 			bluge.NewWildcardQuery("*"+query+"*").SetField("description"),
+			// For fuzzy matches.
+			bluge.NewFuzzyQuery(query).SetField("path").SetBoost(2),
+			bluge.NewFuzzyQuery(query).SetField("name").SetBoost(2),
+			bluge.NewFuzzyQuery(query).SetField("description"),
 		)
 	}
 
