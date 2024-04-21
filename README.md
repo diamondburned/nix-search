@@ -33,7 +33,25 @@ queries, such as `nix-search -e 'description contains "foo" and name contains
 
 ### Nix
 
-TODO: make `default.nix`
+You can install `nix-search` like so:
+
+```nix
+let
+  nix-search = import (pkgs.fetchFromGitHub {
+    owner = "diamondburned";
+    repo = "nix-search";
+    rev = "<REV>";
+    sha256 = "<SHA256>";
+  });
+in
+
+{
+  environment.systemPackages = [ nix-search ];
+}
+```
+
+If you're using Flakes, you can also add `github:diamondburned/nix-flakes` as
+an input and use `nix-flakes.packages.${system}.default`.
 
 ### Go
 
