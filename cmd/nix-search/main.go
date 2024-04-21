@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
@@ -46,9 +45,27 @@ var app = cli.App{
 			&cli.StringFlag{
 				Name:        "channel",
 				Aliases:     []string{"c"},
-				Usage:       "channel path to index or search",
-				Value:       opts.Channel,
-				Destination: &opts.Channel,
+				Usage:       "channel path to index",
+				Value:       opts.Nixpkgs,
+				Destination: &opts.Nixpkgs,
+				Action: func(ctx *cli.Context, v string) error {
+					if !strings.HasPrefix(v, "<") || !strings.HasSuffix(v, ">") {
+						return errors.Errorf("invalid channel %q", v)
+					}
+					return nil
+				},
+			},
+			&cli.StringFlag{
+				Name:  "flake",
+				Usage: "flake to index unless channel is provided",
+				Action: func(c *cli.Context, v string) error {
+					path, err := search.ResolveNixPathFromFlake(c.Context, c.String("flake"))
+					if err != nil {
+						return errors.Wrap(err, "failed to resolve flake")
+					}
+					c.Set("flake", path)
+					return nil
+				},
 			},
 			&cli.IntFlag{
 				Name:        "max-jobs",
@@ -66,19 +83,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	if err := app.RunContext(ctx, os.Args); err != nil {
-		code := 1
-
-		var codeError cli.ExitCoder
-		if errors.As(err, &codeError) {
-			code = codeError.ExitCode()
-		}
-
-		log := hclog.FromContext(ctx)
-		log.Error("error", "err", err)
-
-		os.Exit(code)
-	}
+	commoncmd.Run(ctx, &app)
 }
 
 func mainAction(c *cli.Context) error {
@@ -86,6 +91,14 @@ func mainAction(c *cli.Context) error {
 	indexPath := c.String("index-path")
 
 	if c.Bool("index") {
+		if c.IsSet("flake") {
+			if c.IsSet("channel") {
+				return errors.New("cannot set both --channel and --flake")
+			}
+
+			opts.Nixpkgs = c.String("flake")
+		}
+
 		pkgs, err := search.IndexPackages(ctx, opts)
 		if err != nil {
 			return errors.Wrap(err, "failed to get package index")

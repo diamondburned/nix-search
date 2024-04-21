@@ -164,13 +164,15 @@ func (PackageSet) isDerivation() {}
 
 // IndexPackagesOpts are options for IndexPackages.
 type IndexPackagesOpts struct {
-	Channel     string
+	// Nixpkgs is the Nixpkgs path to index.
+	Nixpkgs string
+	// Parallelism is the number of parallel workers to use.
 	Parallelism int
 }
 
 // DefaultIndexPackageOpts are the default options for IndexPackages.
 var DefaultIndexPackageOpts = IndexPackagesOpts{
-	Channel:     "<nixpkgs>",
+	Nixpkgs:     "<nixpkgs>",
 	Parallelism: runtime.GOMAXPROCS(-1),
 }
 
@@ -179,9 +181,15 @@ func IndexPackages(ctx context.Context, opts IndexPackagesOpts) (TopLevelPackage
 	ctx = hclog.WithContext(ctx,
 		hclog.FromContext(ctx).Named("search.IndexPackages"))
 
+	logger := hclog.FromContext(ctx)
+	logger.Debug(
+		"indexing packages",
+		"nixpkgs", opts.Nixpkgs,
+		"parallelism", opts.Parallelism)
+
 	pi := newPackageIndexer(opts)
 
-	name := opts.Channel
+	name := opts.Nixpkgs
 	if strings.HasPrefix(name, "<") && strings.HasSuffix(name, ">") {
 		name = name[1 : len(name)-1]
 	} else {
@@ -350,7 +358,7 @@ func (pi packageIndexer) worker(ctx context.Context, jobCh <-chan packageIndexJo
 			log := hclog.FromContext(ctx)
 			log.Debug("worker: indexing", "attrs", strings.Join(job.attrs, "."))
 
-			out, err := dumpPackages(ctx, pi.opts.Channel, job.attrs)
+			out, err := dumpPackages(ctx, pi.opts.Nixpkgs, job.attrs)
 			if err != nil {
 				emit(packageIndexResult{
 					packageIndexJob: job,

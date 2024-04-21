@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v3"
@@ -12,7 +13,10 @@ import (
 	"libdb.so/nix-search/search"
 )
 
-var opts = search.DefaultIndexPackageOpts
+var (
+	opts  = search.DefaultIndexPackageOpts
+	flake string
+)
 
 var app = cli.App{
 	Name:  "nix-dump-index",
@@ -24,8 +28,26 @@ var app = cli.App{
 				Name:        "channel",
 				Aliases:     []string{"c"},
 				Usage:       "channel path to index",
-				Value:       opts.Channel,
-				Destination: &opts.Channel,
+				Value:       opts.Nixpkgs,
+				Destination: &opts.Nixpkgs,
+				Action: func(ctx *cli.Context, v string) error {
+					if !strings.HasPrefix(v, "<") || !strings.HasSuffix(v, ">") {
+						return errors.Errorf("invalid channel %q", v)
+					}
+					return nil
+				},
+			},
+			&cli.StringFlag{
+				Name:  "flake",
+				Usage: "flake to index unless channel is provided",
+				Action: func(c *cli.Context, v string) error {
+					path, err := search.ResolveNixPathFromFlake(c.Context, c.String("flake"))
+					if err != nil {
+						return errors.Wrap(err, "failed to resolve flake")
+					}
+					c.Set("flake", path)
+					return nil
+				},
 			},
 			&cli.IntFlag{
 				Name:        "max-jobs",
@@ -43,13 +65,19 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	if err := app.RunContext(ctx, os.Args); err != nil {
-		cli.HandleExitCoder(err)
-	}
+	commoncmd.Run(ctx, &app)
 }
 
 func mainAction(c *cli.Context) error {
 	ctx := c.Context
+
+	if c.IsSet("flake") {
+		if c.IsSet("channel") {
+			return errors.New("cannot set both --channel and --flake")
+		}
+
+		opts.Nixpkgs = c.String("flake")
+	}
 
 	pkgs, err := search.IndexPackages(ctx, opts)
 	if err != nil {

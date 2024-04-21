@@ -1,17 +1,22 @@
 {
-	channel ? <nixpkgs>,
+	nixpkgs ? <nixpkgs>,
+	system ? builtins.currentSystem,
 	attrs ? [],
 }:
 
 with builtins;
 
-let pkgs = import channel {};
+let
+	pkgs = import nixpkgs {
+		inherit system;
+	};
 in
 
 with pkgs.lib;
 with builtins;
 
-let pkgs' = attrByPath attrs {} pkgs;
+let
+	pkgs' = attrByPath attrs {} pkgs;
 
 	isValid = x: (tryEval x).success;
 

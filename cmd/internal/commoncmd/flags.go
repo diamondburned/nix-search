@@ -1,6 +1,10 @@
 package commoncmd
 
 import (
+	"context"
+	"errors"
+	"os"
+
 	"github.com/hashicorp/go-hclog"
 	"github.com/urfave/cli/v3"
 )
@@ -38,4 +42,20 @@ func JoinFlags(flags ...[]cli.Flag) []cli.Flag {
 		all = append(all, f...)
 	}
 	return all
+}
+
+func Run(ctx context.Context, app *cli.App) {
+	if err := app.RunContext(ctx, os.Args); err != nil {
+		code := 1
+
+		var codeError cli.ExitCoder
+		if errors.As(err, &codeError) {
+			code = codeError.ExitCode()
+		}
+
+		log := hclog.FromContext(ctx)
+		log.Error("error", "err", err)
+
+		os.Exit(code)
+	}
 }

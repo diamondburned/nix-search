@@ -1,18 +1,13 @@
 package search
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
 	_ "embed"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/pkg/errors"
 )
 
@@ -27,14 +22,14 @@ type packagesDump map[string]struct {
 }
 
 // dumpPackages returns a list of all packages in the given channel.
-func dumpPackages(ctx context.Context, channel string, attrs []string) (packagesDump, error) {
+func dumpPackages(ctx context.Context, nixpkgs string, attrs []string) (packagesDump, error) {
 	stdout, err := execCommandWriter(ctx,
 		"nix-instantiate", "--eval", "--json", "--strict",
 		"-E", nixExprDumpPackages,
-		"--arg", "channel", channel,
+		"--arg", "nixpkgs", nixpkgs,
 		"--arg", "attrs", toNixArray(attrs))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to dump packages")
+		return nil, err
 	}
 	defer stdout.Close()
 
@@ -61,96 +56,21 @@ func toNixArray(args []string) string {
 	return b.String()
 }
 
-// CommandError is an error that is returned when a command fails.
-type CommandError struct {
-	Stderr []byte
-	err    error
-}
-
-func (err *CommandError) Error() string {
-	return err.err.Error()
-}
-
-func (err *CommandError) Unwrap() error {
-	return err.err
-}
-
-func execCommand(ctx context.Context, arg0 string, argv ...string) (string, error) {
-	logger := hclog.FromContext(ctx)
-	logger.Trace("executing command", "command", arg0, "args", argv)
-
-	var stderr bytes.Buffer
-	var stdout bytes.Buffer
-
-	cmd := exec.CommandContext(ctx, arg0, argv...)
-	cmd.Stderr = &stderr
-	cmd.Stdout = &stdout
-
-	if err := cmd.Run(); err != nil {
-		return "", &CommandError{
-			Stderr: stderr.Bytes(),
-			err:    errors.Wrapf(err, "failed to run command: %q", arg0),
-		}
-	}
-
-	return stdout.String(), nil
-}
-
-func execCommandWriter(ctx context.Context, arg0 string, argv ...string) (io.ReadCloser, error) {
-	logger := hclog.FromContext(ctx)
-	logger.Trace("executing command", "command", arg0, "args", argv)
-
-	var stderr bytes.Buffer
-
-	cmd := exec.CommandContext(ctx, arg0, argv...)
-	cmd.Stderr = &stderr
-
-	stdout, err := cmd.StdoutPipe()
+// ResolveNixPathFromFlake returns the flake-locked Nix store path for the given flake.
+// Using this path, one can directly do `import (path) { }` to evaluate the
+// Nixpkgs instance like using a channel.
+func ResolveNixPathFromFlake(ctx context.Context, flake string) (string, error) {
+	stdout, err := execCommand(ctx, "nix", "flake", "metadata", flake, "--json")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get stdout pipe")
+		return "", err
 	}
 
-	startedAt := time.Now()
-	onDone := func() {
-		endedAt := time.Now()
-		logger.Trace(
-			"command finished",
-			"command", arg0,
-			"args", argv,
-			"duration", endedAt.Sub(startedAt),
-			"stderr", stderr.String(),
-		)
+	var output struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		return "", errors.Wrap(err, "failed to parse flake metadata")
 	}
 
-	if err := cmd.Start(); err != nil {
-		return nil, &CommandError{
-			Stderr: stderr.Bytes(),
-			err:    errors.Wrapf(err, "failed to run command: %q", arg0),
-		}
-	}
-
-	return &cmdWriter{stdout, cmd, onDone}, nil
-}
-
-type cmdWriter struct {
-	io.ReadCloser
-	cmd    *exec.Cmd
-	onDone func()
-}
-
-func (c *cmdWriter) Close() error {
-	defer func() {
-		if c.onDone != nil {
-			c.onDone()
-			c.onDone = nil
-		}
-	}()
-
-	err := c.ReadCloser.Close()
-	if err != nil {
-		c.cmd.Process.Kill()
-		return err
-	}
-
-	return c.cmd.Wait()
+	return output.Path, nil
 }
