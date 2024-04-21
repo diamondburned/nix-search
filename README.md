@@ -29,11 +29,6 @@ that will allow for more accurate results. This will allow for more flexible
 queries, such as `nix-search -e 'description contains "foo" and name contains
 "bar"'`.
 
-### Non-goals
-
-Flakes are not supported. I don't use them. Also, the Nix developers should
-actually develop a better `nix search`, since nothing in Nix is stable anyway :)
-
 ## Installation
 
 ### Nix
@@ -52,6 +47,12 @@ First, index the Nixpkgs tree:
 
 ```sh
 nix-search --index
+```
+
+If you use Nix Flakes, then you can index the `nixpkgs` flake instead:
+
+```sh
+nix search --index --flake nixpkgs
 ```
 
 Then, search for packages:
