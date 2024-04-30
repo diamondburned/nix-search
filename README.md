@@ -1,5 +1,7 @@
 # nix-search
 
+[![asciicast](https://asciinema.org/a/bXhRRcknqyrHlJR5txuR54Yb6.svg)](https://asciinema.org/a/bXhRRcknqyrHlJR5txuR54Yb6)
+
 A better and channel-compatible `nix search` for NixOS using only stable Nix
 tools.
 
