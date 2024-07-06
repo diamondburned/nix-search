@@ -216,19 +216,20 @@ func mainAction(c *cli.Context) error {
 
 	for pkg := range pkgsCh {
 		path := pkg.Path
-		if pkg.Broken {
+		// Fix red coloring when used with other attributes by replacing all
+		// resets with the default color.
+		path = strings.ReplaceAll(path, "\x1b[0m", "\x1b[39m")
+		if pkg.Broken || pkg.UnsupportedPlatform {
 			path = styler.strikethrough(path)
 		}
-		if pkg.UnsupportedPlatform {
-			path = styler.dim(path)
-		}
 
-		fmt.Fprintf(out, "- %s (%s)", path, pkg.Version)
+		fmt.Fprint(out, "- ", path)
+		fmt.Fprint(out, " ", styler.dim("("+pkg.Version+")"))
 		if pkg.Broken {
-			fmt.Fprint(out, " (broken)")
+			fmt.Fprint(out, styler.dim(" (broken)"))
 		}
 		if pkg.UnsupportedPlatform {
-			fmt.Fprint(out, " (unsupported)")
+			fmt.Fprint(out, styler.dim(" (unsupported)"))
 		}
 		fmt.Fprint(out, "\n")
 
@@ -246,14 +247,21 @@ func (s textStyler) strikethrough(text string) string {
 	if !s {
 		return text
 	}
-	return "\x1b[9m" + text + "\x1b[0m"
+	return "\x1b[9m" + text + "\x1b[29m"
 }
 
 func (s textStyler) dim(text string) string {
 	if !s {
 		return text
 	}
-	return "\x1b[2m" + text + "\x1b[0m"
+	return "\x1b[2m" + text + "\x1b[22m"
+}
+
+func (s textStyler) bold(text string) string {
+	if !s {
+		return text
+	}
+	return "\x1b[1m" + text + "\x1b[22m"
 }
 
 func wrap(text, indent string) string {
