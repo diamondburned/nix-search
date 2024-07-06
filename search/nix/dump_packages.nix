@@ -72,7 +72,7 @@ let
 			unfree = 
 				if pkg.meta ? "license"
 				then any
-					(l: if license ? "free" then !license.free else false)
+					(license: if license ? "free" then !license.free else false)
 					(singleton pkg.meta.license)
 				else false;
 			unsupportedPlatform = !meta.availableOn pkgs pkg;
