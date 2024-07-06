@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
@@ -153,7 +154,6 @@ func mainAction(c *cli.Context) error {
 	defer searcher.Close()
 
 	out := io.WriteCloser(os.Stdout)
-
 	if !c.Bool("no-pager") && termWidth() > 0 {
 		pager := os.Getenv("PAGER")
 		if pager == "" {
@@ -179,8 +179,12 @@ func mainAction(c *cli.Context) error {
 				fmt.Fprintf(os.Stderr, "pager failed: %s\n", err)
 			}
 		}()
+	} else {
+		if !c.Bool("no-color") && !isatty.IsTerminal(os.Stdout.Fd()) {
+			log.Debug("not a terminal, disabling color")
+			c.Set("no-color", "true")
+		}
 	}
-
 	defer out.Close()
 
 	searchOpts := search.Opts{
