@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go/doc"
+	"go/doc/comment"
 	"io"
 	"os"
 	"os/exec"
@@ -19,12 +20,10 @@ import (
 	"libdb.so/nix-search/search/searchers/blugesearcher"
 )
 
-var opts = search.DefaultIndexPackageOpts
-
-var searchOpts = search.Opts{
-	Highlight: search.HighlightStyleANSI{},
-	Exact:     true,
-}
+var (
+	opts        = search.DefaultIndexPackageOpts
+	searchExact = true
+)
 
 var app = cli.App{
 	Name:      "nix-search",
@@ -38,6 +37,11 @@ var app = cli.App{
 				Usage: `do not pipe output through a pager; this is the default if stdout is not a terminal`,
 			},
 			&cli.BoolFlag{
+				Name:    "no-color",
+				Usage:   `do not use color in output; this is the default if stdout is not a terminal or if the NO_COLOR environment variable is set`,
+				EnvVars: []string{"NO_COLOR"},
+			},
+			&cli.BoolFlag{
 				Name:    "index",
 				Aliases: []string{"i"},
 				Usage:   "update the index before searching",
@@ -46,8 +50,8 @@ var app = cli.App{
 			&cli.BoolFlag{
 				Name:        "exact",
 				Aliases:     []string{"e"},
-				Value:       searchOpts.Exact,
-				Destination: &searchOpts.Exact,
+				Value:       searchExact,
+				Destination: &searchExact,
 			},
 			&cli.StringFlag{
 				Name:    "index-path",
@@ -179,17 +183,67 @@ func mainAction(c *cli.Context) error {
 
 	defer out.Close()
 
+	searchOpts := search.Opts{
+		Highlight: search.HighlightStyleANSI{},
+		Exact:     searchExact,
+	}
+	if c.Bool("no-color") {
+		searchOpts.Highlight = nil
+	}
+
 	pkgsCh, err := searcher.SearchPackages(ctx, query, searchOpts)
 	if err != nil {
 		return errors.Wrap(err, "failed to search packages")
 	}
 
+	styler := styledText
+	if c.Bool("no-color") {
+		styler = unstyledText
+	}
+
 	for pkg := range pkgsCh {
-		fmt.Fprintf(out, "- %s (%s)\n", pkg.Path, pkg.Version)
-		fmt.Fprintf(out, "%s\n", wrap(pkg.Description, "  "))
+		path := pkg.Path
+		if pkg.Broken {
+			path = styler.strikethrough(path)
+		}
+		if pkg.UnsupportedPlatform {
+			path = styler.dim(path)
+		}
+
+		fmt.Fprintf(out, "- %s (%s)", path, pkg.Version)
+		if pkg.Broken {
+			fmt.Fprint(out, " (broken)")
+		}
+		if pkg.UnsupportedPlatform {
+			fmt.Fprint(out, " (unsupported)")
+		}
+		fmt.Fprint(out, "\n")
+
+		fmt.Fprint(out, wrap(pkg.Description, "  "), "\n")
 	}
 
 	return ctx.Err()
+}
+
+type textStyler bool
+
+const (
+	styledText   textStyler = true
+	unstyledText textStyler = false
+)
+
+func (s textStyler) strikethrough(text string) string {
+	if !s {
+		return text
+	}
+	return "\x1b[9m" + text + "\x1b[0m"
+}
+
+func (s textStyler) dim(text string) string {
+	if !s {
+		return text
+	}
+	return "\x1b[2m" + text + "\x1b[0m"
 }
 
 func wrap(text, indent string) string {
@@ -197,14 +251,16 @@ func wrap(text, indent string) string {
 	if width == 0 {
 		return indent + text
 	}
-
 	if width > 80 {
 		width = 80
 	}
 
-	var out strings.Builder
-	doc.ToText(&out, text, indent, "", width)
-	return out.String()
+	d := new(doc.Package).Parser().Parse(text)
+	pr := &comment.Printer{
+		TextPrefix: indent,
+		TextWidth:  width,
+	}
+	return string(pr.Text(d))
 }
 
 var width = -1
