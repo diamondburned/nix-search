@@ -64,11 +64,17 @@ let
 			"longDescription"
 			"mainProgram"
 			"broken"
-		]) pkg.meta) // {
+		]) pkg.meta) // rec {
 			licenses =
 				if pkg.meta ? "license"
 				then map licenseString (singleton pkg.meta.license)
 				else null;
+			unfree = 
+				if pkg.meta ? "license"
+				then any
+					(l: if license ? "free" then !license.free else false)
+					(singleton pkg.meta.license)
+				else false;
 			unsupportedPlatform = !meta.availableOn pkgs pkg;
 
 			# homepages =
