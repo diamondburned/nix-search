@@ -15,10 +15,8 @@ import (
 var nixExprDumpPackages string
 
 type packagesDump map[string]struct {
-	Description string `json:"description"`
-	Version     string `json:"version"`
-	Broken      bool   `json:"broken"`
-	HasMore     bool   `json:"hasMore"`
+	Meta    json.RawMessage `json:"meta"`
+	HasMore bool            `json:"hasMore"`
 }
 
 // dumpPackages returns a list of all packages in the given channel.

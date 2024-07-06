@@ -19,11 +19,16 @@ type Derivation interface {
 
 // Package is a package that is a derivation.
 type Package struct {
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description"`
-	Version     string `json:"version,omitempty"`
-	Homepage    string `json:"homepage,omitempty"`
-	Broken      bool   `json:"broken,omitempty"`
+	Name                string   `json:"name,omitempty"`
+	Version             string   `json:"version,omitempty"`
+	Description         string   `json:"description"`
+	LongDescription     string   `json:"longDescription,omitempty"`
+	Licenses            []string `json:"license,omitempty"` // usually SPDX identifiers
+	MainProgram         string   `json:"mainProgram,omitempty"`
+	Broken              bool     `json:"broken,omitempty"`
+	UnsupportedPlatform bool     `json:"unsupportedPlatform,omitempty"`
+
+	// Homepages           []string `json:"homepages,omitempty"`
 }
 
 // TopLevelPackages is a set of packages that are top-level packages.
@@ -249,6 +254,13 @@ type packageIndexResult struct {
 	jobs  []packageIndexJob // more jobs
 }
 
+func errorPackageIndexResult(job packageIndexJob, err error) packageIndexResult {
+	return packageIndexResult{
+		packageIndexJob: job,
+		error:           err,
+	}
+}
+
 type packageIndexer struct {
 	opts     IndexPackagesOpts
 	packages PackageSet
@@ -360,10 +372,7 @@ func (pi packageIndexer) worker(ctx context.Context, jobCh <-chan packageIndexJo
 
 			out, err := dumpPackages(ctx, pi.opts.Nixpkgs, job.attrs)
 			if err != nil {
-				emit(packageIndexResult{
-					packageIndexJob: job,
-					error:           err,
-				})
+				emit(errorPackageIndexResult(job, err))
 				continue
 			}
 
@@ -381,12 +390,14 @@ func (pi packageIndexer) worker(ctx context.Context, jobCh <-chan packageIndexJo
 					continue
 				}
 
-				job.parent[attr] = Package{
-					Name:        attr,
-					Description: pkg.Description,
-					Version:     pkg.Version,
-					Broken:      pkg.Broken,
+				ppkg := Package{Name: attr}
+				if err := json.Unmarshal(pkg.Meta, &ppkg); err != nil {
+					err = fmt.Errorf("cannot unmarshal package %q: %w", attr, err)
+					emit(errorPackageIndexResult(job, err))
+					continue
 				}
+
+				job.parent[attr] = ppkg
 			}
 
 			emit(packageIndexResult{

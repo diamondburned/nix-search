@@ -28,9 +28,6 @@ let
 		let eval = tryEval (builtins.hasAttr attr x);
 		in  eval.success && eval.value;
 
-	extractStringAttrs = x:
-		filterAttrs (n: v: isString v) x;
-
 	hasStringAttr = x: attr:
 		hasAttr x attr &&
 		isValid x.${attr} &&
@@ -50,9 +47,35 @@ let
 		hasAttr x "recurseForDerivations"	&&
 		x.recurseForDerivations == true;
 
-	relevantMeta = [ "description" "homepage" "license" "url" "version" ];
-	filterMeta = x:
-		filterAttrs (n: v: elem n relevantMeta) x;
+	licenseString = license:
+		if isString license
+		then license
+		else
+			if isAttrs license && license ? "spdxId"
+			then license.spdxId
+			else null;
+
+	filterPackageMeta = pkg:
+		# List of meta attributes to include in the output.
+		# Keep this in sync with [search.Package].
+		(filterAttrs (n: v: elem n [
+			"version"
+			"description"
+			"longDescription"
+			"mainProgram"
+			"broken"
+		]) pkg.meta) // {
+			licenses =
+				if pkg.meta ? "license"
+				then map licenseString (singleton pkg.meta.license)
+				else null;
+			unsupportedPlatform = !meta.availableOn pkgs pkg;
+
+			# homepages =
+			# 	if pkg.meta ? "homepage"
+			# 	then singleton pkg.meta.homepage
+			# 	else null;
+		};
 
 	# bfs is too slow for Nix.
 	# bfs = pkgs: mapAttrs
@@ -67,9 +90,9 @@ mapAttrs
 	(k: v:
 		if shouldRecurseInto v
 		then { hasMore = true; }
-		else
+		else { meta =
 			if hasAttr v "meta" && isValid v.meta
-			then filterMeta (extractStringAttrs v.meta) // (
+			then filterPackageMeta v // (
 				if hasStringAttr v "version"
 				then { version = v.version; }
 				else { }
@@ -77,7 +100,8 @@ mapAttrs
 			else
 				if hasStringAttr v "version"
 				then { version = v.version; }
-				else { }
+				else { };
+		}
 	)
 	(filterAttrs
 		(k: v:
