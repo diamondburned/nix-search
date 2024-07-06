@@ -12,6 +12,13 @@ import (
 	"libdb.so/nix-search/search"
 )
 
+var indexVersions = []string{
+	"index",
+	"index-v2",
+}
+
+var lastIndexVersion = indexVersions[len(indexVersions)-1]
+
 // PackagesIndexer implements search.PackagesIndexer.
 type PackagesIndexer struct {
 	writer *bluge.Writer
@@ -23,7 +30,7 @@ func IndexPackages(ctx context.Context, path string, packages search.TopLevelPac
 	if path == "" {
 		var err error
 
-		path, err = DefaultIndexPath()
+		path, err = defaultIndexPath()
 		if err != nil {
 			return fmt.Errorf("cannot get default index path: %w", err)
 		}
@@ -44,7 +51,7 @@ func IndexPackages(ctx context.Context, path string, packages search.TopLevelPac
 		return fmt.Errorf("cannot batch package set: %w", err)
 	}
 
-	newPath, err := os.MkdirTemp(path, "index-*")
+	newPath, err := os.MkdirTemp(path, "index-tmp-*")
 	if err != nil {
 		return fmt.Errorf("cannot create new index snapshot: %w", err)
 	}
@@ -64,13 +71,18 @@ func IndexPackages(ctx context.Context, path string, packages search.TopLevelPac
 		return fmt.Errorf("cannot close index: %w", err)
 	}
 
-	if err := swapDir(path, "index", filepath.Base(newPath)); err != nil {
+	if err := swapDir(path, lastIndexVersion, filepath.Base(newPath)); err != nil {
 		return fmt.Errorf("cannot commit new index: %w", err)
 	}
 
 	if err := os.RemoveAll(newPath); err != nil {
 		log := hclog.FromContext(ctx)
 		log.Error("cannot remove new index snapshot", "path", newPath, "error", err)
+	}
+
+	if err := cleanOldIndexFolders(path); err != nil {
+		log := hclog.FromContext(ctx)
+		log.Warn("cannot clean old index folders", "path", path, "error", err)
 	}
 
 	return nil
@@ -93,4 +105,13 @@ func swapDir(basedir, oldname, newname string) error {
 	}
 
 	return unix.Renameat2(int(dir.Fd()), oldname, int(dir.Fd()), newname, unix.RENAME_EXCHANGE)
+}
+
+func cleanOldIndexFolders(indexPath string) error {
+	for _, version := range indexVersions[:len(indexVersions)-1] {
+		if err := os.RemoveAll(filepath.Join(indexPath, version)); err != nil {
+			return fmt.Errorf("cannot remove old index folder %s: %w", version, err)
+		}
+	}
+	return nil
 }

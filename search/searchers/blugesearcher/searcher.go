@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -22,20 +23,42 @@ type PackagesSearcher struct {
 
 var _ search.PackagesSearcher = (*PackagesSearcher)(nil)
 
-// Open opens a PackagesSearcher at the given path. If path is
-// empty, the default path is used.
-func Open(path string) (*PackagesSearcher, error) {
+// Exists checks if the index exists.
+func Exists(path string) bool {
 	if path == "" {
 		var err error
 
-		path, err = DefaultIndexPath()
+		path, err = defaultIndexPath()
+		if err != nil {
+			return false
+		}
+	}
+
+	path = filepath.Join(path, lastIndexVersion)
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+
+	return true
+}
+
+// Open opens a PackagesSearcher at the given path. If path is
+// empty, the default path is used.
+func Open(path string) (*PackagesSearcher, error) {
+	if !Exists(path) {
+		return nil, fmt.Errorf("index does not exist")
+	}
+
+	if path == "" {
+		var err error
+
+		path, err = defaultIndexPath()
 		if err != nil {
 			return nil, fmt.Errorf("cannot get user cache dir: %w", err)
 		}
 	}
 
-	path = filepath.Join(path, "index")
-
+	path = filepath.Join(path, lastIndexVersion)
 	config := bluge.DefaultConfig(path)
 
 	reader, err := bluge.OpenReader(config)

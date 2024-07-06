@@ -111,21 +111,10 @@ func main() {
 func mainAction(c *cli.Context) error {
 	ctx := c.Context
 	log := hclog.FromContext(ctx)
-
 	indexPath := c.String("index-path")
-	if indexPath == "" {
-		p, err := blugesearcher.DefaultIndexPath()
-		if err != nil {
-			return fmt.Errorf("cannot get default Bluge index path: %w", err)
-		}
-		indexPath = p
-		log.Debug(
-			"using default index path",
-			"path", indexPath)
-	}
 
-	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-		log.Info("first run detected, indexing packages...")
+	if !blugesearcher.Exists(indexPath) {
+		log.Info("first run or outdated index detected, will index packages")
 		c.Set("index", "true")
 	}
 
@@ -137,6 +126,8 @@ func mainAction(c *cli.Context) error {
 
 			opts.Nixpkgs = c.String("flake")
 		}
+
+		log.Info("indexing packages")
 
 		pkgs, err := search.IndexPackages(ctx, opts)
 		if err != nil {
