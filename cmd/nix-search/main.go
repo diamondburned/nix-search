@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"go/doc"
 	"go/doc/comment"
@@ -41,6 +42,10 @@ var app = cli.App{
 				Name:    "no-color",
 				Usage:   `do not use color in output; this is the default if stdout is not a terminal or if the NO_COLOR environment variable is set`,
 				EnvVars: []string{"NO_COLOR"},
+			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "output results as JSON, implies --no-{pager,color}",
 			},
 			&cli.BoolFlag{
 				Name:    "index",
@@ -153,6 +158,15 @@ func mainAction(c *cli.Context) error {
 	}
 	defer searcher.Close()
 
+	searchOpts := search.Opts{
+		Exact: searchExact,
+	}
+
+	if c.Bool("json") {
+		c.Set("no-pager", "true")
+		c.Set("no-color", "true")
+	}
+
 	out := io.WriteCloser(os.Stdout)
 	if !c.Bool("no-pager") && termWidth() > 0 {
 		pager := os.Getenv("PAGER")
@@ -187,12 +201,10 @@ func mainAction(c *cli.Context) error {
 	}
 	defer out.Close()
 
-	searchOpts := search.Opts{
-		Highlight: search.HighlightStyleANSI{},
-		Exact:     searchExact,
-	}
-	if c.Bool("no-color") {
-		searchOpts.Highlight = nil
+	var styler textStyler
+	if !c.Bool("no-color") {
+		styler = styledText
+		searchOpts.Highlight = search.HighlightStyleANSI{}
 	}
 
 	pkgsCh, err := searcher.SearchPackages(ctx, query, searchOpts)
@@ -200,9 +212,15 @@ func mainAction(c *cli.Context) error {
 		return errors.Wrap(err, "failed to search packages")
 	}
 
-	styler := styledText
-	if c.Bool("no-color") {
-		styler = unstyledText
+	if c.Bool("json") {
+		var pkgs []search.SearchedPackage
+		for pkg := range pkgsCh {
+			pkgs = append(pkgs, pkg)
+		}
+
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(pkgs)
 	}
 
 	for pkg := range pkgsCh {
@@ -231,10 +249,7 @@ func mainAction(c *cli.Context) error {
 
 type textStyler bool
 
-const (
-	styledText   textStyler = true
-	unstyledText textStyler = false
-)
+const styledText textStyler = true
 
 func (s textStyler) strikethrough(text string) string {
 	if !s {

@@ -32,9 +32,9 @@ type Opts struct {
 
 // SearchedPackage is a package that was searched for.
 type SearchedPackage struct {
-	Package
 	// Path is the path to the derivation.
-	Path string
+	Path string `json:"path"`
+	Package
 }
 
 // HighlightStyle is a style of highlighting.
