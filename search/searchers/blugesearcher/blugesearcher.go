@@ -40,7 +40,8 @@ func newPackageDocument(path search.Path, pkg search.Package) *bluge.Document {
 	return doc
 }
 
-func defaultPath() (string, error) {
+// DefaultIndexPath gets the default index path.
+func DefaultIndexPath() (string, error) {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot get user cache dir: %w", err)

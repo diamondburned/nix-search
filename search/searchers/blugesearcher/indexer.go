@@ -23,7 +23,7 @@ func IndexPackages(ctx context.Context, path string, packages search.TopLevelPac
 	if path == "" {
 		var err error
 
-		path, err = defaultPath()
+		path, err = DefaultIndexPath()
 		if err != nil {
 			return fmt.Errorf("cannot get default index path: %w", err)
 		}

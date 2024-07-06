@@ -28,7 +28,7 @@ func Open(path string) (*PackagesSearcher, error) {
 	if path == "" {
 		var err error
 
-		path, err = defaultPath()
+		path, err = DefaultIndexPath()
 		if err != nil {
 			return nil, fmt.Errorf("cannot get user cache dir: %w", err)
 		}
