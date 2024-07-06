@@ -15,6 +15,7 @@ import (
 var indexVersions = []string{
 	"index",
 	"index-v2",
+	"index-v3",
 }
 
 var lastIndexVersion = indexVersions[len(indexVersions)-1]

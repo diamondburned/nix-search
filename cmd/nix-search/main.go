@@ -225,6 +225,9 @@ func mainAction(c *cli.Context) error {
 
 		fmt.Fprint(out, "- ", path)
 		fmt.Fprint(out, " ", styler.dim("("+pkg.Version+")"))
+		if pkg.Unfree {
+			fmt.Fprint(out, styler.dim(" (unfree)"))
+		}
 		if pkg.Broken {
 			fmt.Fprint(out, styler.dim(" (broken)"))
 		}

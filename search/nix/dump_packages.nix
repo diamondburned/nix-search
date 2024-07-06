@@ -69,10 +69,10 @@ let
 				if pkg.meta ? "license"
 				then map licenseString (singleton pkg.meta.license)
 				else null;
-			unfree = 
+			unfree =
 				if pkg.meta ? "license"
 				then any
-					(license: if license ? "free" then !license.free else false)
+					(license: license ? "free" && !license.free)
 					(singleton pkg.meta.license)
 				else false;
 			unsupportedPlatform = !meta.availableOn pkgs pkg;

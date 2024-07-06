@@ -26,6 +26,7 @@ type Package struct {
 	Licenses            []string `json:"license,omitempty"` // usually SPDX identifiers
 	MainProgram         string   `json:"mainProgram,omitempty"`
 	Broken              bool     `json:"broken,omitempty"`
+	Unfree              bool     `json:"unfree,omitempty"`
 	UnsupportedPlatform bool     `json:"unsupportedPlatform,omitempty"`
 
 	// Homepages           []string `json:"homepages,omitempty"`
