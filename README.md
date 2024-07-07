@@ -72,7 +72,7 @@ nix-search --index
 If you use Nix Flakes, then you can index the `nixpkgs` flake instead:
 
 ```sh
-nix search --index --flake nixpkgs
+nix-search --index --flake nixpkgs
 ```
 
 Then, search for packages:
