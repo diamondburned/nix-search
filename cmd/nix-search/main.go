@@ -165,7 +165,15 @@ func mainAction(c *cli.Context) error {
 			pager = "less"
 		}
 
-		pagerCmd := exec.CommandContext(ctx, pager)
+		var pagerCmd *exec.Cmd
+
+		psplit := strings.Split(pager, " ")
+		if len(psplit) > 1 {
+			pagerCmd = exec.CommandContext(ctx, psplit[0], psplit[1:]...)
+		} else {
+			pagerCmd = exec.CommandContext(ctx, pager)
+		}
+
 		pagerCmd.Stdout = os.Stdout
 		pagerCmd.Stderr = os.Stderr
 
