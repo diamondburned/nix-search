@@ -75,7 +75,11 @@ let
 					(license: license ? "free" && !license.free)
 					(singleton pkg.meta.license)
 				else false;
-			unsupportedPlatform = !meta.availableOn pkgs pkg;
+			unsupportedPlatform =
+				let
+					availableOn = tryEval (meta.availableOn pkgs pkg);
+				in
+					!availableOn.success || !availableOn.value;
 
 			# homepages =
 			# 	if pkg.meta ? "homepage"
