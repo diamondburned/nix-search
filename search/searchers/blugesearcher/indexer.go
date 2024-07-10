@@ -8,7 +8,6 @@ import (
 
 	"github.com/blugelabs/bluge"
 	"github.com/hashicorp/go-hclog"
-	"golang.org/x/sys/unix"
 	"libdb.so/nix-search/search"
 )
 
@@ -105,7 +104,7 @@ func swapDir(basedir, oldname, newname string) error {
 		return err
 	}
 
-	return unix.Renameat2(int(dir.Fd()), oldname, int(dir.Fd()), newname, unix.RENAME_EXCHANGE)
+	return Rename(dir, oldname, newname)
 }
 
 func cleanOldIndexFolders(indexPath string) error {
