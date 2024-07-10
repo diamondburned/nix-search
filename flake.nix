@@ -24,7 +24,7 @@
 				version = self.rev or "unknown";
 				src = self;
 
-				vendorHash = "sha256-h4NVsdJksMkVai1fPc6nV9SouD3DK4UMYl70G9JJw4g=";
+				vendorHash = "sha256-gdqTTc1YsO3feN+OBeBh6inrHfZvp/dio/TUC/Aaol0=";
 
 				meta = with pkgs.lib; {
 					description = "A better and channel-compatible `nix search` for NixOS using only stable Nix tools.";
