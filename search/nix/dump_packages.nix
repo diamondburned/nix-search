@@ -70,7 +70,7 @@ let
 				then map licenseString (singleton pkg.meta.license)
 				else null;
 			unfree =
-				if pkg.meta ? "license"
+				if pkg.meta ? "license" && isValid pkg.meta.license
 				then any
 					(license: license ? "free" && !license.free)
 					(singleton pkg.meta.license)
