@@ -3,6 +3,7 @@ package search
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -14,19 +15,12 @@ import (
 
 // CommandError is an error that is returned when a command fails.
 type CommandError struct {
-	Stderr []byte
-	err    error
+	cmd *exec.Cmd
+	err error
 }
 
 func (err *CommandError) Error() string {
-	var exitErr *exec.ExitError
-	if errors.As(err.err, &exitErr) {
-		if len(err.Stderr) > 0 {
-			return strings.TrimRight(string(err.Stderr), "\n")
-		}
-		return exitErr.Error()
-	}
-	return err.err.Error()
+	return fmt.Sprintf("%s: %v", err.cmd.Args[0], err.err)
 }
 
 func (err *CommandError) Unwrap() error {
@@ -37,20 +31,20 @@ func execCommand(ctx context.Context, arg0 string, argv ...string) (string, erro
 	logger := hclog.FromContext(ctx)
 	logger.Trace("executing command", "command", arg0, "args", argv)
 
-	var stderr bytes.Buffer
 	var stdout bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, arg0, argv...)
-	cmd.Stderr = &stderr
+	cmd.Stderr = newStderrLogger(ctx, cmd)
 	cmd.Stdout = &stdout
 
 	if err := cmd.Run(); err != nil {
 		return "", &CommandError{
-			Stderr: stderr.Bytes(),
-			err:    errors.Wrapf(err, "failed to run command: %q", arg0),
+			cmd: cmd,
+			err: err,
 		}
 	}
 
+	cmd.Stderr.(*stderrLogger).Flush()
 	return stdout.String(), nil
 }
 
@@ -58,10 +52,8 @@ func execCommandWriter(ctx context.Context, arg0 string, argv ...string) (io.Rea
 	logger := hclog.FromContext(ctx)
 	logger.Trace("executing command", "command", arg0, "args", argv)
 
-	var stderr bytes.Buffer
-
 	cmd := exec.CommandContext(ctx, arg0, argv...)
-	cmd.Stderr = &stderr
+	cmd.Stderr = newStderrLogger(ctx, cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -76,14 +68,13 @@ func execCommandWriter(ctx context.Context, arg0 string, argv ...string) (io.Rea
 			"command", arg0,
 			"args", argv,
 			"duration", endedAt.Sub(startedAt),
-			"stderr", stderr.String(),
 		)
 	}
 
 	if err := cmd.Start(); err != nil {
 		return nil, &CommandError{
-			Stderr: stderr.Bytes(),
-			err:    errors.Wrapf(err, "failed to run command: %q", arg0),
+			cmd: cmd,
+			err: err,
 		}
 	}
 
@@ -104,11 +95,45 @@ func (c *cmdWriter) Close() error {
 		}
 	}()
 
-	err := c.ReadCloser.Close()
-	if err != nil {
+	if err := c.ReadCloser.Close(); err != nil {
 		c.cmd.Process.Kill()
 		return err
 	}
 
-	return c.cmd.Wait()
+	if err := c.cmd.Wait(); err != nil {
+		return &CommandError{
+			cmd: c.cmd,
+			err: err,
+		}
+	}
+
+	c.cmd.Stderr.(*stderrLogger).Flush()
+	return nil
+}
+
+type stderrLogger struct {
+	buffer bytes.Buffer
+	logger hclog.Logger
+}
+
+func newStderrLogger(ctx context.Context, cmd *exec.Cmd) *stderrLogger {
+	return &stderrLogger{
+		logger: hclog.FromContext(ctx).Named(cmd.Args[0]),
+	}
+}
+
+func (l *stderrLogger) Write(p []byte) (n int, err error) {
+	l.buffer.Write(p)
+	return len(p), l.Flush()
+}
+
+func (l *stderrLogger) Flush() error {
+	for bytes.Contains(l.buffer.Bytes(), []byte{'\n'}) {
+		line, err := l.buffer.ReadString('\n')
+		if err != nil {
+			panic(fmt.Sprintf("cannot read line: %v", err))
+		}
+		l.logger.Debug(strings.TrimRight(line, "\n"))
+	}
+	return nil
 }

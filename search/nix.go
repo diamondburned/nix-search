@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"strconv"
 	"strings"
 
@@ -33,11 +34,19 @@ func dumpPackages(ctx context.Context, nixpkgs string, attrs []string) (packages
 
 	var packages packagesDump
 	if err := json.NewDecoder(stdout).Decode(&packages); err != nil {
-		return nil, errors.Wrap(err, "failed to parse packages dump")
+		if !errors.Is(err, io.EOF) {
+			return nil, errors.Wrap(err, "failed to parse packages dump")
+		}
+		// Process exited without any output, so it probably failed.
+		// stdout.Close will get us the error.
 	}
 
 	if err := stdout.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to close process reader")
+		return nil, err
+	}
+
+	if packages == nil {
+		return nil, errors.New("failed to dump packages (process did not fail?)")
 	}
 
 	return packages, nil
