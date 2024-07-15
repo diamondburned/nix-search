@@ -52,8 +52,8 @@ in
 }
 ```
 
-If you're using Flakes, you can also add `github:diamondburned/nix-flakes` as
-an input and use `nix-flakes.packages.${system}.default`.
+If you're using Flakes, you can also add `github:diamondburned/nix-search` as
+an input and use `nix-search.packages.${system}.default`.
 
 ### Go
 
