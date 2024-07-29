@@ -162,7 +162,7 @@ func mainAction(c *cli.Context) error {
 	if !c.Bool("no-pager") && termWidth() > 0 {
 		pager := os.Getenv("PAGER")
 		if pager == "" {
-			pager = "less"
+			pager = "less -r"
 		}
 
 		var pagerCmd *exec.Cmd
