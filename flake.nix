@@ -12,7 +12,7 @@
 		{
 			devShells.default = pkgs.mkShell {
 				packages = with pkgs; [
-					go
+					go_1_21
 					gopls
 					gotools
 					sqlc

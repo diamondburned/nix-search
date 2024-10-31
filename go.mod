@@ -1,6 +1,6 @@
 module libdb.so/nix-search
 
-go 1.20
+go 1.21
 
 require (
 	github.com/alecthomas/assert/v2 v2.2.2

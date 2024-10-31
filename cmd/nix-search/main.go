@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mattn/go-isatty"
@@ -245,58 +247,73 @@ func mainAction(c *cli.Context) error {
 		fmt.Fprint(out, "\n")
 
 		fmt.Fprint(out, wrap(pkg.Description, "  "), "\n")
+
+		if pkg.LongDescription != "" && pkg.Description != pkg.LongDescription {
+			fmt.Fprint(out, styleLongDescription(styler, pkg.LongDescription), "\n")
+		}
 	}
 
 	return ctx.Err()
 }
 
-type textStyler bool
+var (
+	reFencedCodeBlock = regexp.MustCompile(`(?ms)\x60\x60\x60+\s*(.*?)\s*\x60\x60\x60+`)
+	reInlineHyperlink = regexp.MustCompile(`(?m)\[(.*?)\]\n*\((http.*?)\)`)
+	reInlineCode      = regexp.MustCompile(`(?m)\x60\x60?(.*?)\x60\x60?`)
+)
 
-const styledText textStyler = true
+// TODO: consider using goldmark?
+func styleLongDescription(styler textStyler, text string) string {
+	linkReplace := styler.bold("$1") + styler.with(dontEndStyle).dim(" ($2)")
+	codeReplace := styler.bold("$1") + styler.with(dontEndStyle).dim("")
 
-func (s textStyler) strikethrough(text string) string {
-	if !s {
-		return text
+	for _, f := range []func(string) string{
+		func(text string) string {
+			var sb strings.Builder
+			sb.Grow(len(text))
+
+			var start int
+			for _, is := range reFencedCodeBlock.FindAllStringSubmatchIndex(text, -1) {
+				sb.WriteString(text[start:is[0]])
+				start = is[1]
+				for _, codeLine := range strings.Split(text[is[2]:is[3]], "\n") {
+					sb.WriteString("\t")
+					sb.WriteString(codeLine)
+					sb.WriteString("\n")
+				}
+			}
+			sb.WriteString(text[start:])
+
+			return sb.String()
+		},
+		func(text string) string { return reInlineHyperlink.ReplaceAllString(text, linkReplace) },
+		func(text string) string { return reInlineCode.ReplaceAllString(text, codeReplace) },
+		func(text string) string { return wrap(text, "  ") },
+		styler.dim,
+	} {
+		text = f(text)
 	}
-	return "\x1b[9m" + text + "\x1b[29m"
-}
 
-func (s textStyler) dim(text string) string {
-	if !s {
-		return text
-	}
-	return "\x1b[2m" + text + "\x1b[22m"
-}
-
-func (s textStyler) bold(text string) string {
-	if !s {
-		return text
-	}
-	return "\x1b[1m" + text + "\x1b[22m"
+	return text
 }
 
 func wrap(text, indent string) string {
-	width := termWidth()
-	if width == 0 {
+	width := min(termWidth(), 80)
+	if width < 1 {
 		return indent + text
-	}
-	if width > 80 {
-		width = 80
 	}
 
 	d := new(doc.Package).Parser().Parse(text)
 	pr := &comment.Printer{
-		TextPrefix: indent,
-		TextWidth:  width,
+		TextCodePrefix: indent + indent,
+		TextPrefix:     indent,
+		TextWidth:      width,
 	}
+
 	return string(pr.Text(d))
 }
 
-var width = -1
-
-func termWidth() int {
-	if width == -1 {
-		width, _, _ = term.GetSize(int(os.Stdout.Fd()))
-	}
-	return width
-}
+var termWidth = sync.OnceValue(func() int {
+	termWidth, _, _ := term.GetSize(int(os.Stdout.Fd()))
+	return termWidth
+})
