@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,7 +77,7 @@ func (s *PackagesSearcher) Close() error {
 
 // SearchPackages implements search.PackagesSearcher. The searching is done by
 // fuzzy matching the query.
-func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opts search.Opts) (<-chan search.SearchedPackage, error) {
+func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opts search.Opts) (iter.Seq[search.SearchedPackage], error) {
 	var highlighter blugehighlight.Highlighter
 	if opts.Highlight != nil {
 		switch highlight := opts.Highlight.(type) {
@@ -127,10 +128,7 @@ func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opt
 		return nil, fmt.Errorf("cannot search: %w", err)
 	}
 
-	results := make(chan search.SearchedPackage)
-	go func() {
-		defer close(results)
-
+	return func(yield func(p search.SearchedPackage) bool) {
 		var locationBuf []blugesearch.Location
 
 		for {
@@ -218,19 +216,15 @@ func (s *PackagesSearcher) SearchPackages(ctx context.Context, query string, opt
 			}
 
 			if highlighter != nil {
-				result = highlightPackage(match, highlighter, result)
+				hresult := highlightPackage(match, highlighter, result)
+				result.Highlighted = &hresult
 			}
 
-			select {
-			case results <- result:
-				// ok
-			case <-ctx.Done():
+			if !yield(result) {
 				return
 			}
 		}
-	}()
-
-	return results, nil
+	}, nil
 }
 
 func highlightPackage(match *blugesearch.DocumentMatch, highlighter blugehighlight.Highlighter, pkg search.SearchedPackage) search.SearchedPackage {

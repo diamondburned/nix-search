@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"html"
+	"iter"
 	"strings"
 )
 
@@ -12,7 +13,7 @@ import (
 type PackagesSearcher interface {
 	// SearchPackages returns a channel of packages that match the given query.
 	// The channel is closed when there are no more results or ctx is canceled.
-	SearchPackages(ctx context.Context, query string, opts Opts) (<-chan SearchedPackage, error)
+	SearchPackages(ctx context.Context, query string, opts Opts) (iter.Seq[SearchedPackage], error)
 }
 
 // Opts are options for searching.
@@ -35,6 +36,10 @@ type SearchedPackage struct {
 	// Path is the path to the derivation.
 	Path string `json:"path"`
 	Package
+
+	// Highlighted is the color-highlighted package, if any.
+	// This is only used if Highlight is set in Opts.
+	Highlighted *SearchedPackage `json:"unhighlighted"`
 }
 
 // HighlightStyle is a style of highlighting.

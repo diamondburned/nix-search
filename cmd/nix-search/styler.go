@@ -29,6 +29,16 @@ func (s textStyler) with(o textStyler) textStyler {
 	return s | o
 }
 
+func (s textStyler) style(text, prefix, suffix string) string {
+	if s&1 == 0 {
+		return text
+	}
+	if s&dontEndStyle != 0 {
+		suffix = ""
+	}
+	return prefix + text + suffix
+}
+
 func (s textStyler) styleTextBlock(text string, prefix, suffix string) string {
 	if s&1 == 0 {
 		return text

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -208,52 +209,92 @@ func mainAction(c *cli.Context) error {
 		searchOpts.Highlight = search.HighlightStyleANSI{}
 	}
 
-	pkgsCh, err := searcher.SearchPackages(ctx, query, searchOpts)
+	pkgsIter, err := searcher.SearchPackages(ctx, query, searchOpts)
 	if err != nil {
 		return errors.Wrap(err, "failed to search packages")
 	}
 
-	if c.Bool("json") {
-		var pkgs []search.SearchedPackage
-		for pkg := range pkgsCh {
-			pkgs = append(pkgs, pkg)
-		}
+	pkgs := slices.Collect(pkgsIter)
 
+	if c.Bool("json") {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		return enc.Encode(pkgs)
 	}
 
-	for pkg := range pkgsCh {
-		path := pkg.Path
-		// Fix red coloring when used with other attributes by replacing all
-		// resets with the default color.
-		path = strings.ReplaceAll(path, "\x1b[0m", "\x1b[39m")
-		if pkg.Broken || pkg.UnsupportedPlatform {
-			path = styler.strikethrough(path)
+	absoluteMatches := make([]search.SearchedPackage, 0, 1)
+	pkgs = slices.DeleteFunc(pkgs, func(p search.SearchedPackage) bool {
+		dotq := "." + query
+		if strings.HasSuffix(p.Path, dotq) {
+			// Rehighlight the package with the query in the path.
+			if p.Highlighted != nil {
+				dotqIx := strings.LastIndex(p.Path, dotq)
+
+				p.Highlighted.Path = "" +
+					p.Path[:dotqIx] +
+					"." + styler.style(query, search.DefaultANSIEscapeColor, "\x1b[0m") +
+					p.Path[dotqIx+len(dotq):]
+			}
+
+			absoluteMatches = append(absoluteMatches, p)
+			return true
 		}
 
-		fmt.Fprint(out, "- ", path)
-		fmt.Fprint(out, " ", styler.dim("("+pkg.Version+")"))
-		if pkg.Unfree {
-			fmt.Fprint(out, styler.dim(" (unfree)"))
-		}
-		if pkg.Broken {
-			fmt.Fprint(out, styler.dim(" (broken)"))
-		}
-		if pkg.UnsupportedPlatform {
-			fmt.Fprint(out, styler.dim(" (unsupported)"))
-		}
-		fmt.Fprint(out, "\n")
+		return false
+	})
 
-		fmt.Fprint(out, wrap(pkg.Description, "  "), "\n")
+	if len(absoluteMatches) > 0 {
+		fmt.Fprintln(out, styler.bold("* Exact matches:"))
+		fmt.Fprintln(out)
+		printPackages(out, styler, absoluteMatches)
 
-		if pkg.LongDescription != "" && pkg.Description != pkg.LongDescription {
-			fmt.Fprint(out, styleLongDescription(styler, pkg.LongDescription), "\n")
-		}
+		fmt.Fprintln(out, styler.bold("* Other matches:"))
+		fmt.Fprintln(out)
 	}
 
+	printPackages(out, styler, pkgs)
+
 	return ctx.Err()
+}
+
+func printPackages(out io.Writer, styler textStyler, pkgs []search.SearchedPackage) {
+	for i := range pkgs {
+		printPackage(out, styler, &pkgs[i])
+	}
+}
+
+func printPackage(out io.Writer, styler textStyler, pkg *search.SearchedPackage) {
+	// Use the highlighted version of the package if available.
+	if pkg.Highlighted != nil {
+		pkg = pkg.Highlighted
+	}
+
+	path := pkg.Path
+	// Fix red coloring when used with other attributes by replacing all
+	// resets with the default color.
+	path = strings.ReplaceAll(path, "\x1b[0m", "\x1b[39m")
+	if pkg.Broken || pkg.UnsupportedPlatform {
+		path = styler.strikethrough(path)
+	}
+
+	fmt.Fprint(out, "- ", path)
+	fmt.Fprint(out, " ", styler.dim("("+pkg.Version+")"))
+	if pkg.Unfree {
+		fmt.Fprint(out, styler.dim(" (unfree)"))
+	}
+	if pkg.Broken {
+		fmt.Fprint(out, styler.dim(" (broken)"))
+	}
+	if pkg.UnsupportedPlatform {
+		fmt.Fprint(out, styler.dim(" (unsupported)"))
+	}
+	fmt.Fprint(out, "\n")
+
+	fmt.Fprint(out, wrap(pkg.Description, "  "), "\n")
+
+	if pkg.LongDescription != "" && pkg.Description != pkg.LongDescription {
+		fmt.Fprint(out, styleLongDescription(styler, pkg.LongDescription), "\n")
+	}
 }
 
 var (
