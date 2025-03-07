@@ -15,6 +15,7 @@ var indexVersions = []string{
 	"index",
 	"index-v2",
 	"index-v3",
+	"index-v4", // better flakes displaying
 }
 
 var lastIndexVersion = indexVersions[len(indexVersions)-1]

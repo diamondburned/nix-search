@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"path"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/pkg/errors"
 )
 
 // Derivation is either a package or a package set.
@@ -35,15 +37,17 @@ type Package struct {
 // TopLevelPackages is a set of packages that are top-level packages.
 type TopLevelPackages struct {
 	PackageSet
-	// Channel is the name of the channel that these packages are from.
+	// Nixpkgs is the name of the source that these packages are from.
 	// For example, "nixpkgs".
-	Channel string `json:"channel"`
+	Nixpkgs string `json:"channel"`
+	// Flake, if true, indicates that these packages are from a flake.
+	Flake bool `json:"flake"`
 }
 
 // Walk walks the package set, calling f on each derivation. If f returns
 // false, the walk is stopped. A DFS is used.
 func (s TopLevelPackages) Walk(f func(Path, Package) bool) {
-	s.PackageSet.Walk(Path{s.Channel}, f)
+	s.PackageSet.Walk(NewPath([]string{s.Nixpkgs}, s.Flake), f)
 }
 
 // PackageSet is a package that is a package set.
@@ -172,6 +176,9 @@ func (PackageSet) isDerivation() {}
 type IndexPackagesOpts struct {
 	// Nixpkgs is the Nixpkgs path to index.
 	Nixpkgs string
+	// Flake is the flake to index. If non-empty, it will override Nixpkgs.
+	// This will cause search to resolve the flake and index it.
+	Flake string
 	// Parallelism is the number of parallel workers to use.
 	Parallelism int
 }
@@ -179,6 +186,7 @@ type IndexPackagesOpts struct {
 // DefaultIndexPackageOpts are the default options for IndexPackages.
 var DefaultIndexPackageOpts = IndexPackagesOpts{
 	Nixpkgs:     "<nixpkgs>",
+	Flake:       "",
 	Parallelism: runtime.GOMAXPROCS(-1),
 }
 
@@ -193,10 +201,20 @@ func IndexPackages(ctx context.Context, opts IndexPackagesOpts) (TopLevelPackage
 		"nixpkgs", opts.Nixpkgs,
 		"parallelism", opts.Parallelism)
 
+	if opts.Flake != "" {
+		path, err := ResolveNixPathFromFlake(ctx, opts.Flake)
+		if err != nil {
+			return TopLevelPackages{}, errors.Wrap(err, "failed to resolve flake")
+		}
+		opts.Nixpkgs = path
+	}
+
 	pi := newPackageIndexer(opts)
 
 	name := opts.Nixpkgs
-	if strings.HasPrefix(name, "<") && strings.HasSuffix(name, ">") {
+	if opts.Flake != "" {
+		name = opts.Flake
+	} else if strings.HasPrefix(name, "<") && strings.HasSuffix(name, ">") {
 		name = name[1 : len(name)-1]
 	} else {
 		name = path.Base(name)
@@ -204,44 +222,86 @@ func IndexPackages(ctx context.Context, opts IndexPackagesOpts) (TopLevelPackage
 
 	return TopLevelPackages{
 		PackageSet: pi.packages,
-		Channel:    name,
+		Nixpkgs:    name,
+		Flake:      opts.Flake != "",
 	}, pi.start(ctx)
 }
 
 // Path is a path to a package. It always starts with the channel name.
-type Path []string
+type Path struct {
+	parts []string
+	flake bool
+}
 
 // FromDotPath converts a dot-separated path to a Path.
 func FromDotPath(path string) Path {
-	return strings.Split(path, ".")
+	flake, rest, ok := strings.Cut(path, "#")
+	if ok {
+		return Path{
+			parts: slices.Concat([]string{flake}, strings.Split(rest, ".")),
+			flake: true,
+		}
+	}
+	return Path{
+		parts: strings.Split(path, "."),
+		flake: false,
+	}
+}
+
+// NewPath creates a new path.
+func NewPath(parts []string, flake bool) Path {
+	return Path{
+		parts: parts,
+		flake: flake,
+	}
+}
+
+// Parts returns the parts of the current path, i.e. all the components
+// in-between dots.
+func (p Path) Parts() []string {
+	return p.parts
 }
 
 // String implements fmt.Stringer.
 func (p Path) String() string {
-	return strings.Join(p, ".")
+	if len(p.parts) == 0 {
+		return ""
+	}
+	if p.flake {
+		return p.parts[0] + "#" + strings.Join(p.parts[1:], ".")
+	}
+	return strings.Join(p.parts, ".")
 }
 
 // Push appends names to the path. The returned path will be a reallocated
 // slice.
 func (p Path) Push(names ...string) Path {
-	return append(append([]string(nil), p...), names...)
+	p2 := p
+	p2.parts = slices.Concat(p2.parts, names)
+	return p2
 }
 
 // PushInplace is like Append, but it appends to the path in-place.
 // Go may or may not reallocate the slice.
 func (p Path) PushInplace(names ...string) Path {
-	return append(p, names...)
+	p2 := p
+	p2.parts = append(p2.parts, names...)
+	return p2
 }
 
 // Pop pops the last name off the path. The returned path will not be a
 // reallocated slice.
 func (p Path) Pop() Path {
-	return p[:len(p)-1]
+	p2 := p
+	p2.parts = p2.parts[:len(p2.parts)-1]
+	return p2
 }
 
 // Clone clones the path.
 func (p Path) Clone() Path {
-	return append([]string(nil), p...)
+	p2 := p
+	p2.parts = slices.Clone(p2.parts)
+	return p2
 }
 
 type packageIndexJob struct {

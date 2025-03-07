@@ -81,16 +81,10 @@ var app = cli.App{
 				},
 			},
 			&cli.StringFlag{
-				Name:  "flake",
-				Usage: "flake to index unless channel is provided",
-				Action: func(c *cli.Context, v string) error {
-					path, err := search.ResolveNixPathFromFlake(c.Context, c.String("flake"))
-					if err != nil {
-						return errors.Wrap(err, "failed to resolve flake")
-					}
-					c.Set("flake", path)
-					return nil
-				},
+				Name:        "flake",
+				Usage:       "flake to index unless channel is provided",
+				Value:       opts.Flake,
+				Destination: &opts.Flake,
 			},
 			&cli.IntFlag{
 				Name:        "max-jobs",
@@ -122,12 +116,8 @@ func mainAction(c *cli.Context) error {
 	}
 
 	if c.Bool("index") {
-		if c.IsSet("flake") {
-			if c.IsSet("channel") {
-				return errors.New("cannot set both --channel and --flake")
-			}
-
-			opts.Nixpkgs = c.String("flake")
+		if c.IsSet("flake") && c.IsSet("channel") {
+			return errors.New("cannot set both --channel and --flake")
 		}
 
 		log.Info("indexing packages")

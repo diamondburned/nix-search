@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 
 func TestBluge(t *testing.T) {
 	packages := search.TopLevelPackages{
-		Channel: "nixpkgs",
+		Nixpkgs: "nixpkgs",
 		PackageSet: search.PackageSet{
 			"nix-search": search.Package{
 				Name:        "nix-search",

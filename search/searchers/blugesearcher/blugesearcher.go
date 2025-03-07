@@ -33,7 +33,7 @@ func newPackageDocument(path search.Path, pkg search.Package) *bluge.Document {
 	doc := bluge.NewDocument(path.String())
 	doc.AddField(bluge.NewStoredOnlyField("json", drvJSON))
 	// hack because bluge is kinda balls and doesn't treat . as a word boundary
-	doc.AddField(newField("path", strings.Join(path, " ")))
+	doc.AddField(newField("path", strings.Join(path.Parts(), " ")))
 	doc.AddField(newField("name", pkg.Name))
 	doc.AddField(newField("description", pkg.Description))
 
